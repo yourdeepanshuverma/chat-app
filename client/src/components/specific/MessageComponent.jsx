@@ -1,9 +1,10 @@
 import { Box, Typography } from '@mui/material'
 import moment from 'moment'
 import React from 'react'
-import { fileformatter } from '../lib/features'
+import { fileformatter, transformImage } from '../lib/features'
 import RenderAttachment from '../shared/RenderAttachment'
 import { msgPillTilte } from '../constants/color'
+import { motion } from "motion/react";
 
 const MessageComponent = ({ message, user }) => {
 
@@ -14,7 +15,9 @@ const MessageComponent = ({ message, user }) => {
     const timeAgo = moment(createdAt).fromNow()
 
     return (
-        <div
+        <motion.div
+        initial={{ opacity: 0, x: "-100%" }}
+        whileInView={{ opacity: 1, x: 0 }}
             style={{
                 backgroundColor: "white",
                 color: "black",
@@ -54,7 +57,7 @@ const MessageComponent = ({ message, user }) => {
                                     color: "black",
                                 }}
                             >
-                                {RenderAttachment(file, url)}
+                                {RenderAttachment(file, transformImage(url))}
                             </a>
                         </Box>
                     )
@@ -64,7 +67,7 @@ const MessageComponent = ({ message, user }) => {
             <Typography variant="caption" color={"text.secondary"}>
                 {timeAgo}
             </Typography>
-        </div>
+        </motion.div>
     )
 }
 

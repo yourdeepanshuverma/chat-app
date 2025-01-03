@@ -7,10 +7,11 @@ import {
 } from '@mui/icons-material'
 import moment from 'moment'
 
-const Profile = () => {
+const Profile = ({ user }) => {
     return (
         <Stack spacing={"2rem"} alignItems={"center"}>
             <Avatar
+                src={user?.avatar?.url}
                 sx={{
                     width: 200,
                     height: 200,
@@ -19,9 +20,10 @@ const Profile = () => {
                     border: "5px solid white"
                 }}
             />
-            <ProfileCard icon={<FaceIcon />} heading={"Username"} text={"ufffcoding"} />
-            <ProfileCard icon={<UsernameIcon />} heading={"Name"} text={"Deepanshu Verma"} />
-            <ProfileCard icon={<CalernderIcon />} heading={"Joined"} text={moment("2003-10-09").fromNow()} />
+            <ProfileCard heading={"Bio"} text={user?.bio} />
+            <ProfileCard icon={<UsernameIcon />} heading={"Username"} text={user?.username} />
+            <ProfileCard icon={<FaceIcon />} heading={"Name"} text={user?.name} />
+            <ProfileCard icon={<CalernderIcon />} heading={"Joined"} text={moment(user?.createdAt).fromNow()} />
         </Stack>
     )
 }

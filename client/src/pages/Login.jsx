@@ -1,34 +1,38 @@
-import auth from "../api/auth";
-import { toast } from "react-toastify";
-import React, { useState } from "react";
-import { useDispatch } from "react-redux";
-import { useForm } from "react-hook-form";
-import { CircleLoader } from "../components/Loaders";
-import { setUser } from "../store/authSlice";
 import LoginIcon from '@mui/icons-material/Login';
-import { Link, useNavigate } from "react-router-dom";
 import { Box, Button, Paper, Stack, TextField, Typography } from "@mui/material";
+import axios from "axios";
+import React from "react";
+import { useForm } from "react-hook-form";
+import { useDispatch, useSelector } from "react-redux";
+import { Link, useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
 import { backgroudGradiant } from "../components/constants/color";
+import { CircleLoader } from "../components/Loaders";
+import { userExists } from '../store/reducers/authSlice';
+import { server } from '../components/constants/config';
 
 export default function Login() {
     const navigate = useNavigate();
     const dispatch = useDispatch();
-    const [isLoading, setIsLoading] = useState(false)
+    const isLoading = useSelector(({ auth }) => auth.isLoading);
 
-    const { register, handleSubmit, reset, formState: { errors } } = useForm({ defaultValues: { email: "", password: "" } });
+    const { register, handleSubmit, reset, formState: { errors } } = useForm({ defaultValues: { username: "", password: "" } });
 
     const handleLogin = async (data) => {
-        setIsLoading(true)
-        const session = await auth.login(data)
-        if (!session) {
-            toast.error("Invalid Credentials");
-            reset()
-            setIsLoading(false)
-        } else {
-            dispatch(setUser(session))
-            toast.success("Logged In");
-            setIsLoading(false)
+        const config = {
+            headers: {
+                "Content-Type": "application/json"
+            },
+            withCredentials: true
+        }
+        try {
+            const { data: userData } = await axios.post(`${server}/users/login`, data, config)
+            dispatch(userExists(userData));
+            toast.success(`Welcome back, ${userData.name}`);
             navigate("/");
+        } catch (error) {
+            reset();
+            toast.error(error?.response?.data?.message);
         }
     };
 
@@ -101,22 +105,18 @@ export default function Login() {
                     onSubmit={handleSubmit(handleLogin)}
                 >
                     <Stack spacing={2}>
-                        {/* EMAIL */}
+                        {/* USERNAME */}
                         <TextField
-                            label="Email address"
-                            placeholder="Enter your email"
-                            type="email"
+                            label="Username"
+                            placeholder="Enter your username"
+                            type="text"
                             variant="standard"
                             focused
                             fullWidth
-                            helperText={errors?.email?.message}
+                            helperText={errors?.username?.message}
                             inputProps={{
-                                ...register("email", {
-                                    required: "Email is required",
-                                    pattern: {
-                                        value: /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/,
-                                        message: "Email address must be a valid address"
-                                    }
+                                ...register("username", {
+                                    required: "Username is required",
                                 })
                             }}
                         />

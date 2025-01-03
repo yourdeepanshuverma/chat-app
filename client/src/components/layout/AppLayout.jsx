@@ -1,24 +1,83 @@
-import React from 'react'
-import Header from './Header'
-import Footer from './Footer'
-import { Grid, Paper } from '@mui/material'
+import { Drawer, Grid, Skeleton } from '@mui/material'
+import { useCallback, useEffect, useRef } from 'react'
+import { useDispatch, useSelector } from 'react-redux'
+import { useParams } from 'react-router-dom'
+import { useError, useSocketEvents } from '../../hooks/hook.jsx'
+import { getSocket } from '../../socket.jsx'
+import { useMyChatsQuery } from '../../store/api/apiSlice.js'
+import { increaseNotificationCount, setNewNotificationAlert } from '../../store/reducers/chatSlice.js'
+import { setDeleteMenu, setMobile, setSelectedDeleteChat } from '../../store/reducers/miscSlice.js'
+import { ALERT, NEW_MESSAGE_ALERT, NEW_REQUEST } from '../constants/event.js'
+import DeleteChatMenu from '../dialogs/DeleteChatMenu.jsx'
+import { saveOrGetLocalStorage } from '../lib/features.js'
 import Title from '../shared/Title.jsx'
 import ChatList from '../specific/ChatList.jsx'
 import Profile from '../specific/Profile.jsx'
-import { sameplechats } from '../constants/sampleData.js'
-import { useParams } from 'react-router-dom'
+import Header from './Header'
 
 const AppLayout = () => (WrappedComponent) => {
     return (props) => {
-
         const { chatId } = useParams()
+        const socket = getSocket()
+        const dispatch = useDispatch()
+        const deleteMenuRef = useRef(null)
 
-        const handleChatDelete = (e, _id,) => { }
+        const { isMobile } = useSelector(state => state.misc)
+        const { user } = useSelector(state => state.auth)
+        const { newMessageAlert } = useSelector(state => state.chat)
+
+        const { refetch, isError, isLoading, error, data } = useMyChatsQuery("")
+
+        const handleMobileClose = () => dispatch(setMobile(false))
+
+        const handleChatDelete = (e, _id, groupChat) => {
+            dispatch(setDeleteMenu(true))
+            dispatch(setSelectedDeleteChat({ chatId: _id, groupChat }))
+            deleteMenuRef.current = e.currentTarget;
+        }
+
+        const newMessageAlertHandler = useCallback((data) => {
+            if (chatId === data.chatId) return
+            dispatch(setNewNotificationAlert(data))
+        }, [chatId])
+
+
+        const newRequestHandler = useCallback(() => {
+            dispatch(increaseNotificationCount())
+        }, [dispatch])
+
+        const alertListner = useCallback((data) => {
+            if (chatId != data.chatId) return
+            refetch()
+        }, [refetch])
+
+        const eventHandler = {
+            [NEW_MESSAGE_ALERT]: newMessageAlertHandler,
+            [NEW_REQUEST]: newRequestHandler,
+            [ALERT]: alertListner
+        };
+
+        useSocketEvents(socket, eventHandler);
+
+        useError([{ isError, error }])
+
+        useEffect(() => {
+            saveOrGetLocalStorage({ key: NEW_MESSAGE_ALERT, value: newMessageAlert })
+        }, [newMessageAlert])
+
 
         return (
             <>
                 <Title />
                 <Header />
+
+                {isLoading ? <Skeleton /> :
+                    (<Drawer open={isMobile} onClose={handleMobileClose}>
+                        <ChatList chats={data?.chats} chatId={chatId} handleChatDelete={handleChatDelete} />
+                    </Drawer>)}
+
+                <DeleteChatMenu deleteAnchorMenu={deleteMenuRef} dispatch={dispatch} />
+
                 <Grid container height={"calc(100vh - 4rem)"}>
                     <Grid
                         item
@@ -33,7 +92,14 @@ const AppLayout = () => (WrappedComponent) => {
                         }}
                         height={"100%"}
                     >
-                        <ChatList chats={sameplechats} chatId={chatId} handleChatDelete={handleChatDelete} />
+                        {isLoading ?
+                            (<Skeleton />) :
+                            (<ChatList
+                                chats={data?.chats}
+                                chatId={chatId}
+                                newMessagesAlert={newMessageAlert}
+                                handleChatDelete={handleChatDelete} />
+                            )}
                     </Grid>
                     <Grid
                         item
@@ -43,8 +109,8 @@ const AppLayout = () => (WrappedComponent) => {
                         lg={6}
                         height={"100%"}
                         padding={"1rem"}
-                        >
-                        <WrappedComponent {...props} />
+                    >
+                        <WrappedComponent {...props} chatId={chatId} user={user} />
                     </Grid>
                     <Grid
                         item
@@ -56,7 +122,7 @@ const AppLayout = () => (WrappedComponent) => {
                             bgcolor: "rgba(0,0,0,0.85)"
                         }}
                         height={"100%"}>
-                        <Profile />
+                        <Profile user={user} />
                     </Grid>
                 </Grid>
                 {/* <Footer /> */}

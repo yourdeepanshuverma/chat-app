@@ -1,3 +1,7 @@
+import { getUserSocket } from "../lib/helper.js";
+
 export const emitEvent = (req, event, users, data) => {
-  console.log("emitting event", event);
+  const io = req.app.get("io");
+  const userSocket = getUserSocket(users);
+  io.to(userSocket).emit(event, data);
 };

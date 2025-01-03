@@ -24,6 +24,11 @@ const fileformatter = (url = "") => {
   return "file";
 };
 
+const transformImage = (url = "", width = 100) => {
+  const newUrl = url.replace("/upload", `/upload/dpr_auto/w_${width}`);
+  return newUrl;
+};
+
 const getLast7Days = () => {
   const currentDate = moment();
   const last7Days = [];
@@ -34,4 +39,12 @@ const getLast7Days = () => {
   return last7Days;
 };
 
-export { fileformatter, getLast7Days };
+const saveOrGetLocalStorage = ({ get, key, value }) => {
+  if (get) {
+    return JSON.parse(localStorage.getItem(key));
+  } else {
+    localStorage.setItem(key, JSON.stringify(value));
+  }
+};
+
+export { fileformatter, transformImage, getLast7Days, saveOrGetLocalStorage };

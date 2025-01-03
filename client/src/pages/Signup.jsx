@@ -1,10 +1,8 @@
 import axios from "axios";
-import auth from "../api/auth.js";
 import { toast } from "react-toastify"
 import { useForm } from "react-hook-form";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { useEffect, useState } from "react";
-import { setUser } from "../store/authSlice.js";
 import { CircleLoader } from "../components/Loaders.jsx";
 import LoginIcon from '@mui/icons-material/Login';
 import { Link, useNavigate } from "react-router-dom";
@@ -12,11 +10,13 @@ import { CameraAlt as CameraAltIcon, Image } from "@mui/icons-material";
 import { VisuallyHiddenInput } from "../components/styles/StyledComponents.jsx";
 import { Avatar, Box, Button, IconButton, Paper, Stack, TextField, Typography } from "@mui/material";
 import { backgroudGradiant } from "../components/constants/color.js";
+import { server } from "../components/constants/config.js";
+import { userExists } from '../store/reducers/authSlice.js'
 
 export default function Signup() {
     const navigate = useNavigate();
     const dispatch = useDispatch();
-    const [isLoading, setIsLoading] = useState(false)
+    const { isLoading } = useSelector(({ auth }) => auth.isLoading)
     const [preview, setPreview] = useState("")
 
     const { register, handleSubmit, watch, reset, formState: { errors }, } = useForm();
@@ -31,25 +31,28 @@ export default function Signup() {
     }, [watch])
 
     const handleSignup = async (data) => {
-        setIsLoading(true)
-        if (data.pic[0]) {
-            const formData = new FormData();
-            formData.append("file", data.pic[0]);
-            formData.append("upload_preset", "chat-app");
-            formData.append("cloud_name", "dgk9uv5lg");
-            const response = await axios.post("https://api.cloudinary.com/v1_1/dgk9uv5lg/image/upload", formData)
-            data.pic = response.data.secure_url
-        }
-        const session = await auth.register(data)
-        if (!session) {
-            toast.error("User Already Exist");
-            reset()
-            setIsLoading(false)
-        } else {
-            dispatch(setUser(session))
-            toast.success("User Created Successfully");
-            setIsLoading(false)
-            navigate("/");
+        const form = new FormData();
+        form.append("name", data.name);
+        form.append("username", data.username);
+        form.append("password", data.password);
+        form.append("avatar", data.avatar[0]);
+        form.append("bio", data.bio);
+
+
+        const config = {
+            headers: {
+                "Content-Type": "multipart/form-data",
+            },
+            withCredentials: true,
+        };
+
+        try {
+            const { data } = await axios.post(`${server}/users/register`, form, config)
+            toast.success("User registered successfully")
+            dispatch(userExists())
+            navigate("/")
+        } catch (error) {
+            toast.error(error?.response?.data?.message || "Something went wrong")
         }
     };
 
@@ -151,7 +154,7 @@ export default function Signup() {
                                 }}
                                 component="label">
                                 < CameraAltIcon />
-                                <VisuallyHiddenInput accept={"image/png, image/jpg, image/jpeg,"} multiple={false} type="file" {...register("pic")} />
+                                <VisuallyHiddenInput accept={"image/png, image/jpg, image/jpeg,"} multiple={false} type="file" {...register("avatar")} />
 
                             </IconButton>
                         </Stack>
@@ -173,20 +176,32 @@ export default function Signup() {
 
                         {/* EMAIL */}
                         <TextField
-                            label="Email address"
-                            placeholder="Enter your email"
-                            type="email"
+                            label="Username"
+                            placeholder="Enter your username"
+                            type="text"
                             variant="standard"
                             focused
                             fullWidth
-                            helperText={errors?.email?.message}
+                            helperText={errors?.username?.message}
                             inputProps={{
-                                ...register("email", {
-                                    required: "Email is required",
-                                    pattern: {
-                                        value: /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/,
-                                        message: "Email address must be a valid address"
-                                    }
+                                ...register("username", {
+                                    required: "Username is required",
+                                })
+                            }}
+                        />
+
+                        {/* BIO */}
+                        <TextField
+                            label="Bio"
+                            placeholder="Enter your bio"
+                            type="text"
+                            variant="standard"
+                            focused
+                            fullWidth
+                            helperText={errors?.bio?.message}
+                            inputProps={{
+                                ...register("bio", {
+                                    required: "Bio is required",
                                 })
                             }}
                         />

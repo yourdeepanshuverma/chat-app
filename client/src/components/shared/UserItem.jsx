@@ -16,7 +16,7 @@ const UserItem = ({ user, handlerAddFriend, handlerIsLoading, isAdded = false, s
                 {...styling}
             >
                 <Avatar
-                    src={avatar}
+                    src={avatar.url}
                 />
                 <Typography
                     variant="body1"

@@ -47,18 +47,16 @@ router
   .route("/groupleave/:id")
   .delete(leaveGroupValidator(), validatorHandler, leaveGroup);
 
-router
-  .route("/message")
-  .post(
-    attachmentsUpload,
-    sendAttachmentsValidator(),
-    validatorHandler,
-    sendAtachment
-  );
+router.route("/sendAttachments").post(
+  attachmentsUpload,
+  sendAttachmentsValidator(),
+  validatorHandler,
+  sendAtachment
+);
 
 router
   .route("/:id")
-  .post(accessChatValidator(), validatorHandler, accessChat)
+  .get(accessChatValidator(), validatorHandler, accessChat)
   .put(renameGroupValidator(), validatorHandler, renameGroup)
   .delete(deleteChatValidator(), validatorHandler, deleteChat);
 router

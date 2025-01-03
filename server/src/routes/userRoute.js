@@ -1,13 +1,14 @@
 import { Router } from "express";
 import {
   acceptRequest,
-  allUsers,
   getMyFriends,
+  getMyProfile,
   getNotifications,
   getProfile,
   loginUser,
   logoutUser,
   registerUser,
+  search,
   sendRequest,
 } from "../controllers/userController.js";
 import { getAuthCookies } from "../middlewares/authMiddleware.js";
@@ -31,7 +32,7 @@ router.route("/login").post(loginValidator(), validatorHandler, loginUser);
 // Only authorized user can access these routes.
 router.use(getAuthCookies);
 
-router.route("/").get(allUsers);
+router.route("/search").get(search);
 router
   .route("/sendrequest")
   .put(sendRequestValidator(), validatorHandler, sendRequest);
@@ -39,6 +40,7 @@ router
   .route("/acceptrequest")
   .put(acceptRequestValidator(), validatorHandler, acceptRequest);
 router.route("/notification").get(getNotifications);
+router.route("/me").get(getMyProfile);
 router.route("/friends").get(getMyFriends);
 router.route("/profile").get(getProfile);
 router.route("/logout").get(logoutUser);

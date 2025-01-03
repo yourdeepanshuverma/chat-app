@@ -76,7 +76,6 @@ const allChats = asyncHandler(async (req, res, next) => {
   const transformedChats = await Promise.all(
     chats.map(async ({ _id, name, members, groupChat, creator }) => {
       const totalMessages = await Message.countDocuments({ chat: _id });
-      console.log("chats");
       return {
         _id,
         name,

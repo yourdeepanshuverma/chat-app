@@ -64,4 +64,34 @@ const getAdminAuthCookies = asyncHandler(async (req, _, next) => {
   next();
 });
 
-export { getAuthHeaders, getAuthCookies, getAdminAuthCookies };
+const socketAuthenticator = async (err, socket, next) => {
+  try {
+    if (err) return next(err);
+
+    const token = socket.request.cookies["Chat"];
+
+    if (!token) {
+      return next(new ErrorHandler(401, "Please login to access this route"));
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    const user = await User.findById(decoded.id);
+
+    if (!user)
+      return next(new ErrorHandler(401, "Please login to access this route"));
+
+    socket.user = user;
+    return next();
+  } catch (error) {
+    console.log(error);
+    return next(new ErrorHandler(401, "Please login to access this route"));
+  }
+};
+
+export {
+  getAuthHeaders,
+  getAuthCookies,
+  getAdminAuthCookies,
+  socketAuthenticator,
+};

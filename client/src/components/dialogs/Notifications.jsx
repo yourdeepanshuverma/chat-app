@@ -1,20 +1,47 @@
+import { useDispatch } from 'react-redux'
 import React, { memo } from 'react'
-import { Avatar, Dialog, DialogTitle, List, ListItem, Stack, Typography, Tooltip, Button } from '@mui/material'
-import { notifications } from '../constants/sampleData'
+import { Avatar, Dialog, DialogTitle, List, ListItem, Stack, Typography, Tooltip, Button, Skeleton } from '@mui/material'
+import { useAcceptFriendRequestMutation, useGetNotificationsQuery } from '../../store/api/apiSlice'
+import { setNotification } from '../../store/reducers/miscSlice'
+import { useSelector } from 'react-redux'
+import { useError } from '../../hooks/hook'
 
 const Notifications = () => {
+  const dispatch = useDispatch()
+  const { isNotification } = useSelector(state => state.misc)
+
+  const { isError, isLoading, error, data, refetch } = useGetNotificationsQuery()
+  const [acceptFriendRequest] = useAcceptFriendRequestMutation()
+
+  const handleAcceptRequest = async ({ _id, accept }) => {
+    dispatch(setNotification(false))
+    const res = await acceptFriendRequest({ requestId: _id, accept })
+    if (res?.data?.success) {
+      console.log("Socket here");
+    }
+  }
+
+  const handleClose = () => dispatch(setNotification(false))
+
+  useError([{ isError, error }])
+
   return (
-    <Dialog open maxWidth={"25rem"}>
+    <Dialog open={isNotification} onClose={handleClose} maxWidth={"25rem"}>
       <Stack p={{ xs: "1rem", sm: "2rem" }}>
         <DialogTitle>Notifications</DialogTitle>
-        {notifications.length > 0 ?
-          <List>
-            {notifications.map(({ sender, _id }) => (
-              <NotificationItem key={_id} sender={sender} _id={_id} />
-            ))}
-          </List>
-          :
-          <Typography textAlign={"center"}>0 Notifications</Typography>
+        {isLoading ? <Skeleton /> :
+          (<>
+            {data?.requests.length > 0 ?
+              <List>
+                {data?.requests?.map(({ sender, _id }) => (
+                  <NotificationItem key={_id} sender={sender} _id={_id} handler={handleAcceptRequest} />
+                ))}
+              </List>
+              :
+              <Typography textAlign={"center"}>0 Notifications</Typography>
+            }
+          </>
+          )
         }
       </Stack>
     </Dialog>
@@ -34,7 +61,7 @@ const NotificationItem = memo(({ sender, _id, handler }) => {
         width={"100%"}
       >
         <Avatar
-          src={avatar}
+          src={avatar.url}
         />
         <Tooltip title={`${name} sent you a friend request.`}>
           <Typography

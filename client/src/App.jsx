@@ -1,7 +1,12 @@
-import { lazy, Suspense } from "react"
-import Protect from './components/auth/Protect';
+import axios from "axios";
+import { lazy, Suspense, useEffect } from "react";
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+import Protect from './components/auth/Protect';
 import LayoutLoader from "./components/Loaders.jsx";
+import { server } from "./components/constants/config.js";
+import { useDispatch } from "react-redux";
+import { userExists, userNotExists } from "./store/reducers/authSlice.js";
+import { SocketProvider } from "./socket.jsx";
 
 const Home = lazy(() => import('./pages/Home.jsx'));
 const Chat = lazy(() => import('./pages/Chat.jsx'));
@@ -17,23 +22,35 @@ const ChatManagement = lazy(() => import('./pages/admin/ChatManagement.jsx'));
 
 
 function App() {
+  const dispatch = useDispatch();
+
+  useEffect(() => {
+    axios.get(`${server}/users/me`, { withCredentials: true })
+      .then((data) => dispatch(userExists(data.data)))
+      .catch((err) => dispatch(userNotExists()));
+  }, [])
+
 
   const router = createBrowserRouter([
     {
       path: "/",
       element: (
-        <Protect authentication>
-          <Home />
-        </Protect>
+        <SocketProvider>
+          <Protect authentication>
+            <Home />
+          </Protect>
+        </SocketProvider>
       ),
       exact: true
     },
     {
       path: "/chat/:chatId",
       element: (
+        <SocketProvider>
         <Protect authentication>
           <Chat />
         </Protect>
+        </SocketProvider>
       ),
       exact: true
     },

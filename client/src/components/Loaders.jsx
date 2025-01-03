@@ -54,3 +54,7 @@ export const CircleLoader = () => {
     </Stack>
   );
 }
+
+export const TypingLoader = () => {
+  return "Typing..."
+}

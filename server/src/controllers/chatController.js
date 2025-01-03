@@ -3,14 +3,17 @@ import { Chat } from "../models/chatModel.js";
 import { User } from "../models/userModel.js";
 import { ErrorHandler } from "../utils/errorHandler.js";
 import { emitEvent } from "../utils/socket.js";
-import { ALERT, NEW_ATTACHMENT, REFETCH_CHATS } from "../constants/event.js";
+import { ALERT, NEW_MESSAGE, REFETCH_CHATS } from "../constants/event.js";
 import { Message } from "../models/messageModel.js";
-import deleteFromCloudinary from "../utils/cloudinary.js";
+import {
+  deleteFromCloudinary,
+  uploadToCloudinary,
+} from "../utils/cloudinary.js";
 
 // Fetch my chats.
 const fetchChats = asyncHandler(async (req, res) => {
   const chats = await Chat.find({
-    members: { $elemMatch: { $eq: req.user._id } },
+    members: req.user._id,
   })
     .populate("members")
     .populate("creator")
@@ -24,9 +27,11 @@ const fetchChats = asyncHandler(async (req, res) => {
         name: name,
         avatar: groupChat
           ? members.slice(0, 3).map((member) => member.avatar.url)
-          : members.filter(
-              (member) => member._id.toString() !== req.user._id.toString()
-            ).avatar.url,
+          : members
+              .filter(
+                (member) => member._id.toString() !== req.user._id.toString()
+              )
+              .map((member) => member.avatar.url),
         groupChat: groupChat,
         members: members.filter(
           (member) => member._id.toString() !== req.user._id.toString()
@@ -149,8 +154,13 @@ const deleteChat = asyncHandler(async (req, res, next) => {
     deleteFromCloudinary(),
     chat.deleteOne(),
     Message.deleteMany({ chat: chatId }),
-  ]),
-    emitEvent(req, REFETCH_CHATS, chat.members);
+  ]);
+
+  const socketMembers = chat.members.filter(
+    (mem) => mem._id.toString() !== req.user._id.toString()
+  );
+
+  emitEvent(req, ALERT, socketMembers);
 
   res.status(200).json({ status: true, message: "Group Chat deleted" });
 });
@@ -186,6 +196,10 @@ const addToGroup = asyncHandler(async (req, res, next) => {
 
   await chat.save().then((chat) => chat.populate("members"));
 
+  const socketMembers = chat.members.map((mem) => mem._id);
+
+  emitEvent(req, ALERT, socketMembers, `Added to the group.`);
+
   res.status(200).json(chat);
 });
 
@@ -205,16 +219,29 @@ const removeFromGroup = asyncHandler(async (req, res, next) => {
     return next(new ErrorHandler(400, "User not in the group"));
   }
 
+  if (chat.creator.toString() === user._id.toString()) {
+    const membersAfterRemoval = chat.members.filter(
+      (member) => member.toString() !== user._id.toString()
+    );
+
+    chat.creator =
+      membersAfterRemoval[
+        Math.floor(Math.random() * membersAfterRemoval.length)
+      ];
+  }
+
   chat.members = chat.members.filter(
     (member) => member.toString() !== user._id.toString()
   );
 
   await chat.save();
 
+  const socketMembers = chat.members.map((mem) => mem._id);
+
   emitEvent(
     req,
     ALERT,
-    chat.members,
+    socketMembers,
     `${user.name} has been removed from the group.`
   );
   res.send(`User ${user.name} removed from the group.`);
@@ -261,18 +288,13 @@ const sendAtachment = asyncHandler(async (req, res, next) => {
     return next(new ErrorHandler(404, "Chat not found"));
   }
 
-  const file = req.files;
+  const files = req.files;
 
-  if (file.length < 1) {
+  if (files.length < 1) {
     return next(new ErrorHandler(400, "Please select a file"));
   }
 
-  const attachments = file.map((file) => {
-    return {
-      public_id: file.originalname,
-      url: file.originalname,
-    };
-  });
+  const attachments = await uploadToCloudinary(files);
 
   const messageForDB = {
     sender: req.user._id,
@@ -292,7 +314,7 @@ const sendAtachment = asyncHandler(async (req, res, next) => {
 
   await Message.create(messageForDB);
 
-  emitEvent(req, NEW_ATTACHMENT, chat.members, {
+  emitEvent(req, NEW_MESSAGE, chat.members, {
     message: messageForRealtime,
     chatId: chatId,
   });
@@ -305,31 +327,53 @@ const sendAtachment = asyncHandler(async (req, res, next) => {
 
 // Access chat
 const accessChat = asyncHandler(async (req, res, next) => {
-  const { id: chatId } = req.params;
+  const { id } = req.params;
+  const { populate } = req.query;
 
-  const chat = await Chat.findById(chatId)
-    .populate("members", "name avatar")
-    .lean();
+  if (populate) {
+    const chat = await Chat.findById(id)
+      .populate("members", "name avatar")
+      .populate("creator", "name avatar")
+      .lean();
 
-  if (!chat) {
-    return next(new ErrorHandler(404, "Chat not found"));
+    if (!chat) {
+      return next(new ErrorHandler(404, "Chat not found"));
+    }
+
+    res.status(200).json({
+      status: true,
+      chat,
+    });
+  } else {
+    const chat = await Chat.findById(id);
+
+    if (!chat) {
+      return next(new ErrorHandler(404, "Chat not found"));
+    }
+
+    res.status(200).json({
+      status: true,
+      chat,
+    });
   }
-
-  chat.members = await chat.members.map(({ _id, name, avatar }) => ({
-    _id: _id,
-    name: name,
-    avatar: avatar.url,
-  }));
-
-  res.status(200).json({
-    status: true,
-    chat,
-  });
 });
 
 // Get messages
 const getMessages = asyncHandler(async (req, res, next) => {
   const { id: chatId } = req.params;
+
+  const chat = await Chat.findById(chatId);
+
+  if (!chat) {
+    return next(new ErrorHandler(404, "Chat not found"));
+  }
+
+  if (!chat.members.includes(req.user._id)) {
+    return next(
+      new ErrorHandler(400, "You are not allowed to access this chat")
+    );
+  }
+
   const { page = 1, resultPerPage = 20 } = req.query;
   const skip = (page - 1) * resultPerPage;
 

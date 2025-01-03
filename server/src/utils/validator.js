@@ -39,7 +39,7 @@ const addMembersValidator = () => [
   body("chatId", "ChatId is required").notEmpty(),
   body("members", "Please add some members")
     .notEmpty()
-    .isArray({ min: 2, max: 100 })
+    .isArray({ min: 1, max: 100 })
     .withMessage("Members must be between 2 and 100"),
 ];
 
@@ -51,7 +51,7 @@ const removeMemberValidator = () => [
 const accessChatValidator = () => [param("id", "Id is required").notEmpty()];
 
 const leaveGroupValidator = () => [
-  param("chatId", "ChatId is required").notEmpty(),
+  param("id", "ChatId is required").notEmpty(),
 ];
 
 const renameGroupValidator = () => [
@@ -63,10 +63,7 @@ const deleteChatValidator = () => [param("id", "Id is required").notEmpty()];
 
 const sendAttachmentsValidator = () => [
   body("chatId", "ChatId is required").notEmpty(),
-  check("files", "Files are required")
-    .notEmpty()
-    .isArray({ min: 1, max: 5 })
-    .withMessage("Attachments must be between 1 and 5"),
+  check("files", "Files are required"),
 ];
 
 const getMessagesValidator = () => [param("id", "Id is required").notEmpty()];

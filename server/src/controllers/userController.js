@@ -5,6 +5,8 @@ import generateToken from "../utils/generateToken.js";
 import { Request } from "../models/request.js";
 import { emitEvent } from "../utils/socket.js";
 import { Chat } from "../models/chatModel.js";
+import { uploadToCloudinary } from "../utils/cloudinary.js";
+import { NEW_REQUEST } from "../constants/event.js";
 
 // Create a new user if not exists.
 const registerUser = asyncHandler(async (req, res, next) => {
@@ -18,9 +20,12 @@ const registerUser = asyncHandler(async (req, res, next) => {
   if (existingUser)
     return ErrorHandler(new ErrorHandler(400, "User Already Exist."));
 
+  const uploadedFile = await uploadToCloudinary([req.file]);
+ 
+
   const avatar = {
-    public_id: "sample_id",
-    url: "sample_url",
+    public_id: uploadedFile[0].public_id,
+    url: uploadedFile[0].url,
   };
 
   const user = await User.create({
@@ -78,7 +83,10 @@ const loginUser = asyncHandler(async (req, res, next) => {
 
 // Logout user
 const logoutUser = asyncHandler(async (req, res) => {
-  res.cookie("Chat", "", { maxAge: 0 }).json("Logged out successfully.");
+  res.cookie("Chat", "", { maxAge: 0 }).json({
+    status: true,
+    message: "Logged out successfully.",
+  });
 });
 
 // Get user profile
@@ -89,24 +97,30 @@ const getProfile = asyncHandler(async (req, res, next) => {
   return res.status(200).send(user);
 });
 
+// Get my profile
+const getMyProfile = asyncHandler(async (req, res, next) => {
+  const user = req.user;
+
+  if (!user) return next(new ErrorHandler(404, "Please login"));
+  return res.status(200).send(user);
+});
+
 // Get Searhed users
-const allUsers = asyncHandler(async (req, res, next) => {
-  const keyword = req.query.search
-    ? {
-        $or: [
-          { name: { $regex: req.query.search, $options: "i" } },
-          { username: { $regex: req.query.search, $options: "i" } },
-        ],
-      }
-    : {};
+const search = asyncHandler(async (req, res, next) => {
+  const { name = "" } = req.query;
+  const myChats = await Chat.find({
+    members: req.user._id,
+    groupChat: false,
+  });
 
-  console.log(req.query.search);
+  const allFriends = myChats.flatMap((chat) => chat.members);
 
-  const users = await User.find(keyword).find({ _id: { $ne: req.user._id } });
+  const notMyFriend = await User.find({
+    _id: { $nin: allFriends },
+    username: { $regex: name, $options: "i" },
+  }).find({ _id: { $ne: req.user._id } });
 
-  if (!users) return next(new ErrorHandler(404, "User not found"));
-
-  res.send(users);
+  res.status(200).send(notMyFriend);
 });
 
 // Send Friend request.
@@ -123,13 +137,13 @@ const sendRequest = asyncHandler(async (req, res, next) => {
     return next(new ErrorHandler(400, "Request already sent"));
   }
 
-  await Request.create({
+  const requestSent = await Request.create({
     sender: req.user._id,
     receiver: userId,
     status: "pending",
   });
 
-  emitEvent.emit(ALERT, userId, req.user._id, "request");
+  emitEvent(req, NEW_REQUEST, [userId], "request");
 
   res.status(200).json({
     success: true,
@@ -140,12 +154,15 @@ const sendRequest = asyncHandler(async (req, res, next) => {
 // Accept Friend request.
 const acceptRequest = asyncHandler(async (req, res, next) => {
   const { requestId, accept } = req.body;
-  const request = await Request.findById(requestId);
+  const request = await Request.findById(requestId)
+    .populate("sender", "name")
+    .populate("receiver", "name");
+
   if (!request) {
     return next(new ErrorHandler(400, "Request not found"));
   }
 
-  if (request.receiver.toString() !== req.user._id.toString()) {
+  if (req.user._id.toString() !== request.receiver._id.toString()) {
     return next(
       new ErrorHandler(400, "You are not authorized to accept this request")
     );
@@ -154,19 +171,27 @@ const acceptRequest = asyncHandler(async (req, res, next) => {
   if (accept) {
     request.status = "accepted";
     await request.save();
-  }
-
-  if (!accept) {
+    await Chat.create({
+      name: `${request.sender.name}-${request.receiver.name}`,
+      members: [request.sender._id, request.receiver._id],
+      groupChat: false,
+    });
+    return res.status(200).json({
+      success: true,
+      message: "Request accepted successfully",
+    });
+  } else if (!accept) {
     request.deleteOne();
     await request.save();
-  }
 
-  res.status(200).json({
-    success: true,
-    message: "Request accepted successfully",
-  });
+    return res.status(200).json({
+      success: true,
+      message: "Request rejected successfully",
+    });
+  }
 });
 
+// Get Notifications
 const getNotifications = asyncHandler(async (req, res, next) => {
   const requests = await Request.find({
     receiver: req.user._id,
@@ -179,32 +204,36 @@ const getNotifications = asyncHandler(async (req, res, next) => {
   });
 });
 
+// Get my friends
 const getMyFriends = asyncHandler(async (req, res, next) => {
   const { chatId } = req.query;
 
   const chats = await Chat.find({
-    _id: chatId,
     members: req.user._id,
     groupChat: false,
   }).populate("members", "name avatar");
 
   if (!chats) return next(new ErrorHandler(404, "Chat not found"));
 
-  const friends = chats.members.map((member) => {
-    const otherMember = member.filter(
-      (mem) => mem._id.toString() !== req.user._id.toString()
+  const friends = chats?.flatMap(({ members }) => {
+    const otherMembers = members.find(
+      (member) => member._id.toString() !== req.user._id.toString()
     );
     return {
-      _id: otherMember._id,
-      name: otherMember.name,
-      avatar: otherMember.avatar.url,
+      _id: otherMembers._id,
+      name: otherMembers.name,
+      avatar: otherMembers.avatar,
     };
   });
 
   if (chatId) {
-    const availableFriends = friends.filter(
-      (friend) => !chats.members.includes(friend._id)
-    );
+    const chat = await Chat.findById(chatId).populate("members", "name avatar");
+
+    const availableFriends = friends.filter((friend) => {
+      return !chat.members.some(
+        (member) => member._id.toString() === friend._id.toString()
+      );
+    });
 
     res.status(200).json({
       success: true,
@@ -213,13 +242,13 @@ const getMyFriends = asyncHandler(async (req, res, next) => {
   } else {
     res.status(200).json({
       success: true,
-      friends,
+      friends: friends,
     });
   }
 });
 
 export {
-  allUsers,
+  search,
   loginUser,
   logoutUser,
   getProfile,
@@ -227,5 +256,6 @@ export {
   sendRequest,
   acceptRequest,
   getNotifications,
+  getMyProfile,
   getMyFriends,
 };
